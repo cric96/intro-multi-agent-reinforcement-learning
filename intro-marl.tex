@@ -57,7 +57,7 @@
 \title[Multi-Agent Reinforcement Learning]
 {Multi-Agent Reinforcement Learning}
 %
-\subtitle[]{Introduction}
+\subtitle[]{Unleashing Collective Intelligence}
 %
 \author[\sspeaker{Aguzzi}]
 {\speaker{Gianluca Aguzzi} \href{mailto:gianluca.aguzzi@unibo.it}{gianluca.aguzzi@unibo.it}}
@@ -100,10 +100,6 @@
 \section*{Outline}
 %%===============================================================================
 
-%===============================================================================
-\section{Introduction}
-%===============================================================================
-
 %/////////
 \begin{frame}[c]{Multi-Agent Reinforcement Learning (MARL)}
 %/////////
@@ -124,25 +120,23 @@
 \end{alertblock}
 \begin{exampleblock}{Today Outline}
 	\begin{itemize}
-		\item MARL abstractions
-		\begin{itemize}
-			\item[\faArrowRight] From MDP to Stochastic game
-		\end{itemize}
+		\item MARL differences with respect to Single Agent RL
 		\item MARL classification
 		\begin{itemize}
 			\item[\faArrowRight] Cooperative vs. Competitive agents
 			\item[\faArrowRight] Centralised vs Decentralised learning and acting
 			\item[\faArrowRight] Homogeneous vs Heterogeneous agents
 		\end{itemize}
-		\item Scale to \textbf{infinity}: MARL in Collective Adaptive Systems \& Aggregate Computing
-		\item Repositories: 
-			\href{https://github.com/cric96/pc-multi-agent-modelling}{\faLink}
-			\href{https://github.com/cric96/swarm-rl-alchemist}{\faLink}
+		\item Reference to MARL algorithms
+		\item Scale to \textbf{infinity}: MARL large scale applications
+		%\item Repositories: 
+		%	\href{https://github.com/cric96/pc-multi-agent-modelling}{\faLink}
+		%	\href{https://github.com/cric96/swarm-rl-alchemist}{\faLink}
 
 	\end{itemize}
 \end{exampleblock}
 \end{frame}
-\begin{frame}{Motivating Example}
+\begin{frame}{Motivating Examples}
 \centering
 \begin{exampleblock}{OpenAI Hide And Seek: \url{https://openai.com/blog/emergent-tool-use/}}
 	\begin{figure}
@@ -150,178 +144,283 @@
 	\end{figure}
 \end{exampleblock}
 \end{frame}
-\subsection{Stochastic Games}
-%/////////
-\begin{frame}[c]{Stochastic Game $\mathcal{S}$ (or Markov games)}
-	%/////////
-	\begin{alertblock}{Definition}
-		\begin{itemize}
-			\item $\mathcal{S}$ is a tuple $<N, S, \{A^i\}_{i \in \{ 1, \dots, N\}}, P, \{R^i\}_{i \in \{ 1, \dots, N\}}>$
-			\item $N$ is the number of agents ($|N| > 1 $)
-			\item $S$ is the global environment state
-			\item $A^i$ is the action state of agent $i$. $\mathbb{A} := A^1 \times \dots\times A^N$ is the joint action space
-			\item $P: S x \mathbb{A} \rightarrow \mathcal{P}(S)$ is the state transaction. $\mathcal{P}$ is a discrete probabilistic distribution %(associate for each $s \in S$ a probability)
-			\item $R^i: S \times \mathbb{A} \times S \rightarrow \mathbb{R}$ is the reward signal
-			\item Typical time evolution: $ S_0, \mathbb{A}_0, \mathbb{R}_1, S_1, \dots  $
-		\end{itemize}
-	\end{alertblock}
-	\begin{exampleblock}{Paper Rock Scissor (Repeated)}
-		\begin{tasks}(2)
-			\task $N = 2$
-			\task $A^1 = A^2 = $ \{Paper, Rock, Scissor\}
-			\task $S = \{ \mathbb{A}_{t-1} \} $
-			\task $R = \begin{blockarray}{cccc}
-        & Rock & Paper & Scissor \\
-      \begin{block}{c[ccc]}
-        Rock    & 0, 0  & -1, 1 & 1, -1 \\
-        Paper   & 1, -1 & 0, 0  & -1, 1 \\
-        Scissor & -1, 1 & 1, -1 & 0, 0 \\
-      \end{block}
-    \end{blockarray}$
-		\end{tasks}
-	\end{exampleblock}
-\end{frame}	
-\begin{frame}[fragile, allowframebreaks]{Stochastic Game (Scala Modelling)}
-\begin{exampleblock}{Stochastic Game Model}
-\begin{lstlisting}[style=scala]
-trait StochasticGame[State, Action]:
-	def agents: Int 
-	def initialState: Distribution[State]
-	def transitionFunction: (State, Seq[Action]) => Distribution[State]
-	def rewardFunction: (State, Seq[Action], State) => Seq[Double]
-\end{lstlisting}	
-\end{exampleblock}
-\begin{exampleblock}{Multi-Agent Environment façade}
-	\begin{lstlisting}[style=scala]
-trait MultiAgentEnvironment[State, Action]:
-	// current environment state
-	def state: State
-	// given a joint action, return the reward
-	def act(actions: Seq[Action]): Seq[Double]
-	// reset the internal environment state 
-	def reset(): Unit 
-\end{lstlisting}	
-\end{exampleblock}
-\begin{exampleblock}{Environment factory}
-\begin{lstlisting}[style=scala]
-object StochasticGame:
-	def createEnvironment[State, Action](
-			stochasticGame: StochasticGame[State, Action]
-	): MultiAgentEnvironment[State, Action] =
-		new MultiAgentEnvironment: // hide the dynamics on a MAS facade
-			var state: State = stochasticGame.initialState.sample
-			override def act(actions: Seq[Action]): Seq[Double] =
-				val previousState = state
-				val nextState = stochasticGame.transitionFunction(state, actions)
-				state = nextState.sample
-				stochasticGame.rewardFunction(previousState, actions, state)
-			override def reset(): Unit = state = stochasticGame.initialState.sample
-\end{lstlisting}
-\end{exampleblock}
-\begin{exampleblock}{Repeated Rock Paper Scissor}
-\begin{lstlisting}[style=scala]
-class Dynamics extends StochasticGame[State, Action]:
-	override def agents: Int = 2
-
-	override def initialState: Distribution[State] =
-		Distribution.one(Seq(None, None))
-	override def transitionFunction: (State, Seq[Action]) => Distribution[State] =
-		(_, actions) => Distribution.one(actions.map(Some(_)))
-
-	override def rewardFunction: 
-		(State, Seq[Action], State) => Seq[Double] = (_, actions, _) => payoff(actions.toList)
-
-	private def payoff(actions: List[Choice]): Seq[Double] = actions match
-		case left :: right :: Nil if left == right => List(0, 0)
-		case Rock :: Scissor :: Nil => List(1, -1)
-		case Scissor :: Paper :: Nil => List(1, -1)
-		case Paper :: Rock :: Nil => List(1, -1)
-		case left :: right :: Nil =>
-			payoff(right :: left :: Nil).reverse
-\end{lstlisting}
+\begin{frame}{Motivating Examples}
+\begin{exampleblock}{Capture The Flag: \url{https://deepmind.com/blog/article/capture-the-flag-science}}
+	\begin{figure}
+		\centering
+		\href{https://www.youtube.com/watch?v=dltN4MxV1RI}{\includegraphics[width=0.85\textwidth]{img/capture-the-flag.png}}
+	\end{figure}	
 \end{exampleblock}
 \end{frame}
-\section{Learning in Multi Agent Environment}
-\begin{frame}[allowframebreaks]{Learning in Multi Agent Environment / Stochastic Games}
-\begin{exampleblock}{Task type}
-	\begin{itemize}
-		\item \textbf{Cooperative}
-		\begin{itemize}
-			\item Agents share the same reward function ($R^1 = R^2 = \dots = R^N$) or the same collective goal
-			\item Examples: multi-agent pathfinding, multi-agent resource allocation, multi-agent task allocation, \dots
-		\end{itemize}
-		\item \textbf{Competitive}
-		\begin{itemize}
-			\item Agents compete with each other to maximise a long-term return
-			\item Examples: Boards games, battle games, \dots
-		\end{itemize}
-	\end{itemize}
-\end{exampleblock}
-%%%%
-\begin{exampleblock}{Policy Type}
-\begin{itemize}
-	\item \textbf{Homogeneous}
-	\begin{itemize}
-		\item Each agent has the same action space ($ A^1 = A^2 = .. A ^N$) and use the \textbf{same} policy ($ \pi^0 = \pi^N$)
-		\item Used in \emph{cooperative} settings and with many agent interactions (e.g., swarm robotics)
-		\begin{itemize}
-			\item Complexity emerges from interactions
-		\end{itemize}
-		\item Examples (swarm robotics): obstacle avoidance, flocking, team formation, \dots
-	\end{itemize}
-	\item \textbf{Heterogeneous}
-	\begin{itemize}
-		\item Each agent has a different action space ($ A^1 \neq A^2 \neq .. A ^N$) and use a \textbf{different} policy ($ \pi^0 \neq \pi^N$)
-	\end{itemize}
-\end{itemize}
-\end{exampleblock}
-%%%%
-\begin{exampleblock}{Communication constraints}
-\begin{itemize}
-	\item \textbf{Independent}
-	\begin{itemize}
-		\item The policy of each agent is independent of the policy of the other agents
-		\item Cooperation could emerge through environment dynamics (but is hard)
-	\end{itemize}
-	\item \textbf{Joint Action}
-	\begin{itemize}
-		\item The policy of each agent depends on the action of the other agents ($ \pi(s_t, a^{-i}_t)^i $, where $-i$ means the other agents' indices)
-		\item Cooperation is explicitly encoded in the policy
-		\item Action space exponentially increases with the agent population
-	\end{itemize}
-\end{itemize}
-\end{exampleblock}
-%%%%
-\begin{exampleblock}{Execution constraints}
-\begin{itemize}
-	\item \textbf{Centralised}
-	\begin{itemize}
-		\item A central controller is responsible for the execution of the policy
-		\item It has a global view of the environment and can coordinate the agents
-	\end{itemize}
-	\item \textbf{Decentralised}
-	\begin{itemize}
-		\item Each agent executes its own policy
-		\item They don't have a global view of the environment, but (potentially) they can communicate
-	\end{itemize}
-\end{itemize}
-\end{exampleblock}
-%%%%
-\begin{exampleblock}{Learning constraints}
-\begin{itemize}
-	\item \textbf{Centralised}
-	\begin{itemize}
-		\item A central agent is responsible for the learning process
-		\item It could produce centralised or decentralised policies
-	\end{itemize}
-	\item \textbf{Decentralised}
-	\begin{itemize}
-		\item Each agent has its own learning process
-		\item It mainly produces decentralised policies
-	\end{itemize}
-\end{itemize}
-\end{exampleblock}
+\begin{frame}{Motivating Examples}
+	\begin{exampleblock}{Robot Collision Avoidance}
+		\centering
+		\begin{figure}
+			\href{https://www.youtube.com/watch?v=Uj1yAmlL5lk}{\includegraphics[width=0.7\textwidth]{img/collective-learning.png}}
+		\end{figure}
+	\end{exampleblock}
+\end{frame}
+\begin{frame}{Motivating Examples}
+	\begin{exampleblock}{MAgent}
+		\begin{figure}
+			\href{https://www.youtube.com/watch?v=HCSm0kVolqI}{\includegraphics[width=0.7\textwidth]{img/magent.png}}
+		\end{figure}
+	\end{exampleblock}
+\end{frame}
+\begin{frame}[allowframebreaks]{Real-case applications}
 
+\begin{exampleblock}{Trafic control reduction}
+	\begin{itemize}
+		\item Trafic control is an important issue in modern cities (long waiting times, accidents)
+		\item Coordinating the actions of multiple agents (cars) can lead to a better overall performance
+	\end{itemize}
+	\centering
+	\includegraphics[width=0.38\textwidth]{img/traffic.jpg}
+\end{exampleblock}
+\begin{exampleblock}{Antenna tilt control}
+	\begin{itemize}
+		\item The joint configuration base stations can be optimized according to the distribution
+	\end{itemize}
+	\centering
+	\includegraphics[width=0.4\textwidth]{img/antenna.png}
+\end{exampleblock}
+\end{frame}
+\begin{frame}{Benefits of Multi-Agent Learning}
+	\begin{itemize}
+		\item \textbf{Sharing experience}
+		\begin{itemize}
+			\item via communication, teaching, imitation
+		\end{itemize}
+		\item \textbf{Parallel computation}
+		\begin{itemize}
+			\item due to decentralized task structure
+		\end{itemize}
+		\item \textbf{Robustness}
+		\begin{itemize}
+			\item redundancy, having multiple agents to accomplish a task
+		\end{itemize}
+	\end{itemize}
+\end{frame}
+\begin{frame}{Single Agent Reinforcement Learning}
+	\begin{exampleblock}{What have you seen so far \dots}
+		\begin{itemize}
+			\item We have seen how to model the agent-environment interactions
+			\item Find a learning process that eventually leads to an \emph{optimal} policy $\pi^*$
+			\item Q-Learning (in general \emph{value-based approaches}) as a prominent algorithm to reach converge
+		\end{itemize}
+	\end{exampleblock}
+	\begin{alertblock}{\dots But plain RL works only under some conditions}
+		\begin{itemize}
+			\item Full environment observability and Markovian property
+			\item Stationary environment
+			\item State/action space should be small enough to be stored in memory (otherwise, we should leverage function approximators)
+		\end{itemize}	
+	\end{alertblock}
+\end{frame}
+
+\begin{frame}{Partial Observable environments}
+%/////////
+	\begin{alertblock}{Definition}
+		An agent does not have a \emph{perfect} and \emph{complete} knowledge of the state of the environment
+	\end{alertblock}
+
+	\begin{figure}
+		\includegraphics[height=5cm]{img/challenge-partial-observable.pdf}
+	\end{figure}
+\end{frame}
+\begin{frame}[c]{Non-stationary environments}
+	%/////////
+	\begin{alertblock}{Definition}
+		The environment model (e.g. the random variable associated with it) changes
+		over time.
+	\end{alertblock}
+	\begin{exampleblock}{}
+		\begin{itemize}
+			\item Real-case environment dynamics could change over time (e.g. markets, city traffic, routing networks)
+			\item Practically, it seems that RL (in particular Temporal Difference (TD) methods) works well even in this case
+			\item \emph{But, we lose convergence guarantees.}
+		\end{itemize}
+	\end{exampleblock}
+%
+\includegraphics[width=\textwidth]{img/non-stationary.png}
+\end{frame}
+
+\begin{frame}{Agents-environment interaction}
+\begin{itemize}
+	\item Simple modelation:
+	\begin{itemize}
+		\item At each time step $t$
+		\begin{itemize}
+			\item Each agent $i$ observes the environment state $s_t$ (or a part of it, $o_t^i$)
+			\item Each agent $i$ selects an action $a_t^i$ (possibly different from the others)
+			\item The collective action is $a_t = (a_t^1, \dots, a_t^N)$ is applied to the environment
+			\item The environment evolves to a new state $s_{t+1}$ and provides a reward $r_{t+1}$ to each agent
+		\end{itemize}
+	\end{itemize}
+\end{itemize}
+\centering
+\includegraphics[width=0.4\textwidth]{img/single-agent-multi-agent-1.pdf}
+\includegraphics[width=0.4\textwidth]{img/single-agent-multi-agent-2.pdf}
+\end{frame}
+
+\begin{frame}{Multi but how many?}
+	\begin{itemize}
+		\item Well-studied applications \faArrowRight \, 2 agents
+		\begin{itemize}
+			\item mainly board games
+		\end{itemize}
+		\item Finite number of agents \faArrowRight \, $N$ agents
+		\begin{itemize}
+			\item e.g. traffic control, antenna tilt control
+			\item Two-agents approaches can be extended to $N$ agents
+			\item Finite but small
+		\end{itemize}
+		\item ``Infinite''
+		\begin{itemize}
+			\item Very large-scale systems
+			\item We cannot know the number of agents in advance
+			\item Typically referred as \emph{many} agent systems
+		\end{itemize}
+	\end{itemize}
+\end{frame}
+
+\begin{frame}{MARL Systems: Task type}
+	%/////////
+		\begin{alertblock}{Cooperative}
+			\begin{itemize}
+				\item Agents share the same reward function ($R^1 = \dots = R^N$) in order to accomplish a collective goal
+			\end{itemize}
+		\end{alertblock}
+		\centering
+		\includegraphics[height=3.5cm]{img/cooperative.jpg}
+		\includegraphics[height=3.5cm]{img/cas-1.jpg}
+		
+	\end{frame}
+	
+	\begin{frame}{MARL Systems: Task type}
+		\begin{exampleblock}{Competitive}
+			\begin{itemize}
+				\item Agents compete with each other to maximise a long term return
+				\item Board Games, Video games, \dots
+			\end{itemize}
+		\end{exampleblock}
+	
+		\centering
+		\includegraphics[height=3.5cm]{img/competitive.jpg}
+		\includegraphics[height=3.5cm]{img/ping.png}
+		
+	\end{frame}
+	
+	\begin{frame}{MARL Systems: Task type}
+		\begin{exampleblock}{Mixed}
+			\begin{itemize}
+				\item Agents can both compete and cooperate in order to maximise a global reward function
+				\item Also called \textit{General Sum games}
+			\end{itemize}
+		\end{exampleblock}
+	
+		\begin{figure}
+			\includegraphics[height=5cm]{img/mixed}
+		\end{figure}
+	\end{frame}
+	
+	\begin{frame}{On Cooperative Task}
+		\begin{exampleblock}{Homogeneous}
+			\begin{itemize}
+				\item Each agent has same capabilities ($A^1 = \dots = A^N$)
+				\item The overall goal is to find the best policy that is the same for each agent ($\pi^* = {\pi^{*}}_1 = \pi^{*}_2 = \dots = {\pi^{*}}_N$)
+			\end{itemize}
+		\end{exampleblock}
+		\begin{exampleblock}{Heterogeneous}
+			\begin{itemize}
+				\item Each agent could have different capabilities (in the worst case, $A^1 \neq \dots \neq A^N$)
+				\item Each agent has its local policy that should be maximised following the global collective goal
+			\end{itemize}
+		\end{exampleblock}
+	\end{frame}
+	
+	%/////////
+	\begin{frame}{MARL Systems: Learning Scheme}
+		\begin{exampleblock}{Centralised Training and Centralised Execution (CTCE)}
+			\begin{itemize}
+				\item \emph{One} agent with a global view of the system (in the cloud? or in a server?)
+				\item Nodes send their perception to that central agent
+				\item With these perceptions, the central node creates a global state of the system
+				\item With the current policy, it chooses the actions that nodes should perform (\emph{Control})
+				\item In the next time step, it evaluates the reward function and updates the policy accordingly (\emph{Learn})
+				\item \emph{Are the nodes agents?}
+				\item Used mainly in offline (i.e. at simulation time) setting 
+			\end{itemize}
+		\end{exampleblock}
+	
+	\end{frame}
+	%/////////
+	
+	%/////////
+	\begin{frame}{MARL Systems: Learning Scheme}
+		\begin{exampleblock}{Centralised Training and Centralised Execution (CTCE)}
+			\begin{figure}
+				\includegraphics[height=6cm]{img/learning-scheme-clce.pdf}
+			\end{figure}
+		\end{exampleblock}
+	\end{frame}
+	%/////////
+	
+	%/////////
+	\begin{frame}{MARL Systems: Learning Scheme}
+		
+		\begin{exampleblock}{Decentralised Training and Decentralised Execution (DTDE)}
+			\begin{itemize}
+				\item Each node has its local policy/value table
+				\item They can perceive the environment state (or they can observe a part of it)
+				\item With the current state, they perform an action following their local policy (\emph{Control})
+				\item In the next time step, they update their policy following a local reward function (\emph{Learn})
+				\item Both used in offline and online (i.e. deployment time) setting
+			\end{itemize}
+		\end{exampleblock}
+	\end{frame}
+	%/////////
+	
+	
+	%/////////
+	\begin{frame}{MARL Systems: Learning Scheme}
+		\begin{exampleblock}{Decentralised Training and Decentralised Execution (DTDE)}
+			\begin{figure}
+				\includegraphics[height=6cm]{img/learning-scheme-dtde.pdf}
+			\end{figure}
+		\end{exampleblock}
+	\end{frame}
+	
+	\begin{frame}{MARL Systems: Learning Scheme}
+		
+		\begin{exampleblock}{Centralised Training and Decentralised Execution (CTDE)}
+			\begin{itemize}
+				\item A simulation time learning online execution pattern
+				\item \emph{Simulation time}
+				\begin{itemize}
+					\item Each node follows the typical $o_t, a_t, o_{t+1}, a_{t+1},\dots $ trajectory using a local policy
+					\item After an episode, this trajectory (or something derived from it) will be sent to a central learner
+					\item It, using a global view of the system, improves the policies of the agents 
+					\item An then the policies will be shared with the agents
+				\end{itemize} 
+				\item \emph{Execution time}
+					\begin{itemize}
+						\item Each agent has the local policy distilled during the simulation time
+						\item With it, they act in the environment
+					\end{itemize}
+			\end{itemize}
+		\end{exampleblock}
+	\end{frame}
+	
+	
+	\begin{frame}{MARL Systems: Learning Scheme}
+		\begin{exampleblock}{Decentralised Training and Decentralised Execution (DTDE)}
+			\begin{figure}
+				\includegraphics[height=6cm]{img/learning-scheme-ctde.pdf}
+			\end{figure}
+		\end{exampleblock}
+	\end{frame}
+\begin{frame}{Single Agent \faArrowRight \, Multi Agent}
 \begin{alertblock}{Big Question: Can we use Single Agent RL in MAS?}
 \begin{itemize}
 	\item It depends on the \emph{task type}, \emph{policy type}, \emph{communication} constraints, \emph{execution} constraints, and \emph{learning} constraints
@@ -333,247 +432,96 @@ class Dynamics extends StochasticGame[State, Action]:
 		\item Execution constraints: centralised/decentralised
 		\item Learning constraints: centralised/decentralised
 	\end{itemize}
-	\item In other cases, they could fail easier
+	\item What about the reward function?
+	\begin{itemize}
+		\item A reward function for each agent?
+		\item A collective reward function?
+		\item Combination?
+	\end{itemize}
 \end{itemize}
 \end{alertblock}
 \end{frame}
-\begin{frame}[fragile, allowframebreaks]{Learning in MAS: Abstractions}
-\begin{exampleblock}{Agent Definition}
-	\begin{itemize}
-		\item An agent is a function that maps an observation to an action
-		\item Observation could be different from environment state (i.e., the agent could have a different view of the environment)
-		\item It records the trajectory of the agent-environment interactions $(s, a, r, s')$ 
-	\end{itemize}
-\begin{lstlisting}[style=scala]
-trait Agent[-Obs, Action]:
-	def act(state: Obs): Action
-	def record(state: Obs, action: Action, reward: Double, nextState: Obs): Unit 
-	def reset(): Unit
-\end{lstlisting}
-\end{exampleblock}
-\begin{exampleblock}{Learner extension}
-\begin{itemize}
-	\item A \lstinline[style=scala]{Learner} is a special type of agent that has a policy that will be improved through experience
-	\item It has two policy, \emph{behavioural} used during the training, and \emph{optimal} used to test the agent
-\end{itemize}
-\begin{lstlisting}[style=scala]
-trait Learner[Obs, Action]:
-  self: AI.Agent[Obs, Action] =>
-	def mode: AgentMode
-  def optimal: Obs => Action // used to test the agent
-  def behavioural: Obs => Action // used during training
-  override def act(state: Obs): Action = 
-		(if mode == AgentMode.Training then behavioural else optimal) (state)
-	override def record(
-		state: Obs, action: Action, reward: Double, nextState: Obs
-	): Unit =
-    if mode == AgentMode.Training then improve(state, action, reward, nextState)
-  def improve(state: Obs, action: Action, reward: Double, nextState: Obs): Unit
-\end{lstlisting}
-\end{exampleblock}
-\framebreak
-\begin{exampleblock}{Q Learner Implementation}
-	\begin{lstlisting}[style=scala]
-class QAgent[Obs, Action: Enumerable](
-		q: Q[Obs, Action], alpha: Ref[Double], gamma: Double, epsilon: Double
-)(using random: Random) extends Agent[Obs, Action] with Learner[Obs, Action]:
-	val optimal: Obs => Action = state => bestOutcome(state)._1 // Greedy policy
-	val behavioural: Obs => Action = state => // Epsilon greedy policy
-		if random.nextDouble() < epsilon.value 
-			then random.shuffle(Enumerable[Action]).head
-			else optimal(state)
-
-	override def improve(....): Unit =
-		val qT = q(state, action)
-		val (_, qMax) = bestOutcome(nextState)
-		val update = qT + alpha.value * (reward + gamma * qMax - qT)
-		q.update(state, action, update)
-
-	private def bestOutcome(state: Obs): (Action, Double) =
-		Enumerable[Action].map(action => (action, q(state, action))).maxBy(_._2)
-
-	\end{lstlisting}
-\end{exampleblock}
-
-\begin{exampleblock}{Simulation definition}
-	\begin{lstlisting}[style=scala]
-class Simulation[State, Action](
-	val environment: MultiAgentEnvironment[State, Action]
-):
-	def simulate(
-		episodes: Int, episodeLength: Int, agents: Seq[Agent[State, Action]]
-	): Unit =
-		for episode <- 0 to episodes do
-			agents.foreach(_.reset())
-			environment.reset()
-			for _ <- 0 to episodeLength do
-				val currentState = environment.state
-				val actions = agents.map(_.act(currentState))
-				val rewards = environment.act(actions)
-				val nextState = environment.state
-				val actionAndRewards = actions.zip(rewards)
-				agents.zip(actionAndRewards).foreach { case (agent, (action, reward)) =>
-					agent.record(currentState, action, reward, nextState)
-				}
-\end{lstlisting}
-\end{exampleblock}
-\end{frame}
-\subsection{Learning in Competitive Multi Agent Environment}
-\begin{frame}{Learning in Competitive Multi Agent Environment: Repeated Rock Paper Scissors}
-	\begin{alertblock}{Goal?}
+\begin{frame}{Independent Q Learning}
+	\begin{alertblock}{Idea}
 		\begin{itemize}
-			\item An agent always wins against a random agent?
-			\item An agent always wins against a fixed strategy agent?
-			\item An agent always wins against a learning agent?
-			\item Nash equilibrium: no agent can improve its performance by changing its strategy
+			\item Each agent has its own Q table
+			\item Each agent improves its Q table independently following a local policy	
 		\end{itemize}
 	\end{alertblock}
-	\begin{exampleblock}{Repeated Rock Paper Scissor Example}
+	\begin{exampleblock}{Problems}
 		\begin{itemize}
-			\item Nash equilibrium: all agents play randomly
-			\item In this case: 
-			\begin{itemize}
-				\item With Q-Learning we will find deterministic strategies
-				\item The equilibrium will reach a condition in which each play always plays the same action
-			\end{itemize}
+			\item The agents could learn a policy that is not optimal for the collective goal
+			\item The agents could learn a policy that is not optimal for the other agents
+			\item The agents could learn a policy that is not optimal for the environment
 		\end{itemize}
 	\end{exampleblock}
+	\begin{columns}
+		\begin{column}[b]{0.5\textwidth}
+			\href{https://www.youtube.com/watch?v=nn6_GUVDnVw&list=PLfLv_F3r0TwyaZPe50OOUx8tRf0HwdR_u&index=2}{
+				\includegraphics[width=\textwidth]{img/competitive.png}}
+					
+		\end{column}
+		\begin{column}[b]{0.5\textwidth}
+			\href{https://www.youtube.com/watch?v=Gb9DprIgdGw&list=PLfLv_F3r0TwyaZPe50OOUx8tRf0HwdR_u&index=1}{
+				\includegraphics[width=\textwidth]{img/cooperative.png}}
+					
+		\end{column}
+	\end{columns}
 \end{frame}
-\subsection{Learning in Cooperative Multi Agent Environment}
-\begin{frame}[allowframebreaks]{Learning in Cooperative Multi Agent Environment: Agents Alignment}
-\begin{exampleblock}{Agents Alignment}
+\begin{frame}{COMA}
 	\begin{itemize}
-		\item \textbf{N} Agents live in a bounded grid world of size $W \times H$
-		\item Each agent has a position in the grid $(x_i, y_i)$
-		\item The state of the environment consists in the position of all the agents $X = {(x_1, y_1), (x_2, y_2), ..., (x_n, y_n)}$
-		\item The action of each agent is one of the following (up, down, left, right, stay)
-		\item Collective goal: all agents should be aligned in the same row/column
+		\item COMA (Counterfactual Multi-Agent) is a technique that uses a \emph{centralised} training and a \emph{decentralised} execution
+		\item Idea: ease the learning processes by giving a \emph{global} view of the environment 
+		\item Counterfactual baseline: a baseline that is independent of the actions taken by the agent
 		\begin{itemize}
-			\item reward function: if all agents are aligned, then reward = 10, otherwise reward = -1
+			\item Used to understand the impact of the agent's actions
 		\end{itemize}
 	\end{itemize}
-\end{exampleblock}
-\centering
-\includegraphics[width=0.8\textwidth]{img/agent-modelling.pdf}
-\begin{alertblock}{How?}
-	\begin{itemize}
-		\item Independent Learner with Heterogeneous Policy
-		\begin{itemize}
-			\item Each agent has its own policy and Q table
-			\item They update it during the training
-			\item \textbf{Problems}:
-			\begin{itemize}
-				\item Non-stationary environment (the state of the environment changes during the training)
-				\item It hardly scales with the number of agent
-			\end{itemize}
-		\end{itemize}
-		\item Centralised Learner with Homogeneous Policy
-		\begin{itemize}
-			\item Each agent has access to a shared Q-table and policy
-			\item That table is updated during the training
-			\item \textbf{Problems}:
-			\begin{itemize}
-				\item The policy is simpler with the respect to the one of the independent learners
-				\item \dots but it potentially scales with any number of agents
-			\end{itemize}
-		\end{itemize}
-		\item Centralised Learner with Centralised and Joint Policy
-		\begin{itemize}
-			\item A central server coordinates the training and the execution of the agents
-			\item The server has a policy and a Q-table that depends on the joint action of all the agents
-			\item \textbf{Problems}:
-			\begin{itemize}
-				\item The action space grows exponentially with the number of agents (e.g. 5 agents, 5 actions each, $5^5=3125$ possible joint actions)
-			\end{itemize}
-		\end{itemize}
-		\item NB! Tabular methods are not the only ones that can be used to solve this problem \faArrowRight \, \textbf{Deep Reinforcement Learning} for complex state environment (o partial observable state)
-	\end{itemize}
-\end{alertblock}
+	\includegraphics[width=\textwidth]{img/coma.png}
 \end{frame}
-\subsection{Introduction of Deep Reinforcement Learning}
-
-\begin{frame}{Introduction of Deep Reinforcement Learning}
-\begin{itemize}
-	\item Tabular Reinforcement Learning (e.g., Q Learning, SARSA, ...) has several limitations:
+\begin{frame}{Learning to Communicate}
 	\begin{itemize}
-		\item It is not able to handle complex state space 
-		\begin{itemize}
-			\item Agent Alignment example: state space size is equal to: $(WxH)^N$
-			\begin{tasks}
-				\task $W = H = 5$, $N = 2$ = $25^2$ = 625
-				\task $W = H = 5$, $N = 3$ = $25^3$ = 15625
-				\task $W = H = 5$, $N = 4$ = $25^4$ = 390625
-			\end{tasks}
-		\end{itemize}
-		\item It is not able to handle partial observable state space
-		\item It is not able to handle continuous action space
-		\item \dots
+		\item The agent coordination can be ruled via \emph{communication}
+		\item This communication can be learned through \emph{reinforcement learning}
 	\end{itemize}
-	\item Deep Reinforcement Learning is a family of methods that overcome these limitations using \emph{neural networks}
-	\item Several algorithms have been proposed:
-	\begin{itemize}
-		\item \textbf{Deep Q-Learning}: The Q-table is approximated by a neural network
-		\begin{itemize}
-			\item It could handle continuous state space
-			\item It could be used for raw input (e.g., images)
-			\item It has been used to solve complex tasks (e.g., Atari games)
-		\end{itemize}
-		\item Policy Gradient: the neural networks are used to represent the \emph{policy} of the Agents
-		\item Several others: Actor-Critic, Deep Deterministic Policy Gradient, \dots
-	\end{itemize}
-\end{itemize}
-\end{frame}
-\begin{frame}[allowframebreaks, fragile]{Deep Q-Learning}
-	\begin{exampleblock}{Key ingredients}
-		\begin{itemize}
-		\item \textbf{network network}: A neural network that maps the state to the action/value pairs.
-		\begin{itemize}
-			\item It could be seen as a function from state to (action, value) pairs. 
-		\end{itemize}
-		\item \textbf{target network}: It has the same architecture of the network policy, but is used to compute the target value.
-		\begin{itemize}
-			\item the target policy is updated less frequently than the network policy, to improve the stability of the learning process.
-		\end{itemize}
-		\item \textbf{reply buffer/experience replay}: It is used to store the experience of the agent during the training.
-		\begin{itemize}
-			\item This experience is then used to train the network policy.
-			\item The experience is sampled randomly from the buffer.
-			\begin{itemize}
-				\item this reduces the correlation between the samples.
-			\end{itemize}
-		\end{itemize}
-	\end{itemize}
-	\end{exampleblock}
 	\centering
-	\includegraphics[width=\textwidth]{img/dqn.pdf}
-	\begin{exampleblock}{Pseudocode}
-\begin{lstlisting}[style=scala]
-val policyNetwork = // initialize the network policy
-val targetNetwork = // initialize the target network
-val replyBuffer = // initialize the reply buffer
-for(episode <- 1 to maxEpisodes) do
-	val environment = // initialize the environment
-	for(step <- 1 to maxSteps) do
-		val action = policyNetwork(state)
-		val (nextState, reward) = environment.execute(action)
-		replyBuffer.add(state, action, reward, nextState)
-		val batch = replyBuffer.sample(batchSize)
-		val targetValue = batch.map { experience =>
-			val (state, action, reward, nextState) = experience
-			val targetValue = reward + discountFactor * targetNetwork(nextState)
-		}
-		policyNetwork.update(batch, targetValue)
-		if(step % targetNetworkUpdateFrequency == 0) then
-			targetNetwork = policyNetwork
-		
-\end{lstlisting}
-	\end{exampleblock}
+	\includegraphics[width=\textwidth]{img/learning-to-communicate.png}
 \end{frame}
-\section{Scale to \textbf{Infinity}: Learning in CAS}
-\begin{frame}{Learning in CAS}
+\begin{frame}{MAPPO}
+	\begin{itemize}
+		\item MAPPO (Multi-Agent Proximal Policy Optimisation) is the extension of PPO to MARL
+		\begin{itemize}
+			\item Promising results in cooperative and competitive tasks with few agents
+		\end{itemize}
+	\end{itemize}
+	\centering
+	\includegraphics[width=\textwidth]{img/mappo.png}
+\end{frame}
+\begin{frame}{Decentralised Hysteretic Deep-Recurrent-Q Learning}
+	\begin{itemize}
+		\item The previous approach suppose to have a centralised controller
+		\item cons:
+		\begin{itemize}
+			\item offline learning
+			\item hard to scale (without weight sharing)
+		\end{itemize}
+		\item Decentralised Hysteretic Deep-Q Learning (DH-DQL) is a technique that uses a \emph{decentralised} training and a \emph{decentralised} execution
+		\item The agents maximise a local reward function
+		\begin{itemize}
+			\item Collective goal reached by emergent behaviour
+		\end{itemize}
+		\item Strategies:
+		\begin{itemize}
+			\item \emph{Hysteretic}: heuristic that prevents the agents to change their policy too often bringing in miscoordination
+			\item \emph{Recurrent Neural Network}: to manage the partial observability
+		\end{itemize}
+	\end{itemize}
+\end{frame}
+
+\begin{frame}{Learning in Many Agent Systems}
 	\begin{alertblock}{Problems}
 		\begin{itemize}
-			\item Collective Adaptive System are challenging environments for learning
+			\item Many Agent Systems are challenging environments for learning
 			\begin{itemize}
 				\item The agents involved could be hundreds or thousands
 				\item The state space could be very large
@@ -582,7 +530,6 @@ for(episode <- 1 to maxEpisodes) do
 			\end{itemize}
 		\end{itemize}
 	\end{alertblock}
-	
 	\begin{alertblock}{How?}
 		\begin{itemize}
 			\item Constraints on policy: \emph{homogeneous}
@@ -602,73 +549,35 @@ for(episode <- 1 to maxEpisodes) do
 		\end{itemize}
 	\end{alertblock}
 \end{frame}
-\begin{frame}{Example: Simple Flocking Behaviour}
-	\begin{exampleblock}{Scenario}
-		\begin{itemize}
-			\item \textbf{N} agents placed in a 2D world
-			\item Each agent has \textbf{M} neighbours
-			\item The action spaces is the set of possible directions (e.g., 8 directions + stand still)
-			\item The state space is the set distance vector to the neighbours
-			\begin{itemize}
-				\item State space size: \emph{M * 2}
-			\end{itemize}
-			\item Goal: the agents should move without colliding and try to stay close to each other
-			\item reward function is composed of two te
-			\begin{itemize}
-				\item cohesion: the farthest agent distance should be as small as possible
-					\begin{itemize}
-						\item $R_cohesion = -(max_{distance} - target_{distance})$
-					\end{itemize}
-				\item collision: the nearest agent distance should be as large as possible
-				\begin{itemize}
-					\item $R_collision = log(min_{distance} / target_{distance})$
-				\end{itemize}
-			\end{itemize}
-		\end{itemize}
-	\end{exampleblock}
+\begin{frame}{Mean-field Reinforcement Learning}
+	\begin{itemize}
+		\item \textbf{Mean-field} Reinforcement Learning (MRL) is a technique to reduce the complexity of a multi-agent system
+		\item The idea is to approximate the behaviour of the agents as a single agent (i.e., the \textbf{mean-field} agent)
+	\end{itemize}
+	\centering
+	\includegraphics[width=0.45\textwidth]{img/mean-field.png}
+	\centering
+	\includegraphics[width=0.45\textwidth]{img/result-mean-field.png}
 \end{frame}
-\subsection{Hybrid Aggregate Computing}
-\begin{frame}{Hybrid Aggregate Computing}
-	\begin{alertblock}{Why}
+	\begin{frame}{Field-Informed Multi-Agent Reinforcement Learning}
 		\begin{itemize}
-			\item \textbf{Aggregate Computing}: framework used to express self-organising behaviours
-			\begin{itemize}
-				\item[\faThumbsUp] Flexible and expressive
-				\item[\faThumbsUp] Scalable to a large number of agents
-				\item[\faThumbsUp] Robust to failures
-			\end{itemize}
-			\item Limitations:
-			\begin{itemize}
-				\item Distributed Algorithms typically involve fine-tuning made by experts
-				\item Certain behaviours are difficult to express
-				\item Adaptive behaviours could be hard to implement
-				\item \faArrowRight \, ML could be a mechanism to overcome these limitations
-			\end{itemize}
+			\item Field-Informed MARL is a technique that guides the learning process of the agents using a \emph{computational} field
+			\item Idea: ease the learning process by providing a \emph{prior} knowledge about the environment
 		\end{itemize}
-	\end{alertblock}
-	\begin{alertblock}{Where?}
-		\begin{itemize}
-			\item \textbf{Algorithms definition}: RL could be employed to learn part of aggregate algorithms 
-			\begin{itemize}
-				\item[\faArrowRight] \citefield{aguzzi2022towards}{title}
-			\end{itemize}
-			\item \textbf{Execution strategy}: For the same program, several execution strategies could carry on the right result. RL could be used to learn the best strategy that improves the performance of the system 
-			\begin{itemize}
-				\item[\faArrowRight] \citefield{aguzzi2022addressing}{title}
-			\end{itemize}
-			\item \textbf{System structure}: RL could be used to learn the best structure (i.e., where to \emph{place} the computation) of the system.
-		\end{itemize}
-	\end{alertblock}
-\end{frame}
+		\centering
+		\includegraphics[width=0.8\textwidth]{img/field-informed.png}
+		\centering
+		\includegraphics[width=0.8\textwidth]{img/field-informed-schema.png}
+	\end{frame}
 
 \begin{frame}{Example: Follow the leader}
 \begin{exampleblock}{Scenario}
 	\begin{itemize}
-		\item Same setting as before (N agents, M neighbours, 8 directions + stand still)
+		\item Configuration: N agents, M neighbours, 8 directions + standstill
 		\item But aggregate computing is used to share the leader towards a gradient
 		\item Reward function is composed of two terms
 		\begin{itemize}
-			\item collision: the nearest agent distance should be as large as possible (same as before)
+			\item collision: the nearest agent distance should be as large as possible 
 			\item leader: the distance to the leader should be as small as possible
 		\end{itemize}
 	\end{itemize}
@@ -680,26 +589,57 @@ for(episode <- 1 to maxEpisodes) do
 	\includegraphics[width=0.3\textwidth]{img/moment-c.png}
 }
 \end{frame}
+\begin{frame}{Open Challenges}
+	\begin{itemize}
+		\item \textbf{Curse of dimensionality}
+		\begin{itemize}
+			\item Exponential growth in computational complexity from an increase in state and action
+			dimensions. Also a challenge for single-agent problems. 
+			\begin{itemize}
+				\item Partially handled by homogeneous policies 
+			\end{itemize}
+		\end{itemize}
+		\item \textbf{Specifying a good (learning) objective}
+		\begin{itemize}
+			\item Agent returns are correlated and cannot be maximized independently.
+			\begin{itemize}
+				\item Multi-agent credit assignment problem (how can I know if my action was good?)
+			\end{itemize}
+		\end{itemize}
+		\item \textbf{Need for coordination}
+		\begin{itemize}
+			\item Agent actions affect other agents and could confuse other agents (or herself) if not
+			careful. Also called destabilizing training
+		\end{itemize}
+		\item \textbf{No formal guarantees}
+		\begin{itemize}
+			\item No formal guarantees on convergence, stability, or optimality
+		\end{itemize}
 
+	\end{itemize}
+\end{frame}
 \begin{frame}{Conclusion}
-\begin{itemize}
-	\item Aggregate computing \faPlus \, ML is still an open research area
-	\item Preliminary results are promising ...
-	\item ... But several things need to be explored
 	\begin{itemize}
-		\item methods: MADDPG? PPO? A3C? MAPPO?
-		\item architectures: CNN? GNN? MLP?
-		\item reward functions: Dense? Sparse? Collective? Local?
-		\item applications: learn to restructure? learn to schedule messages?
+		\item Multi-Agent Reinforcement Learning is a very active research field
+		\item From Single to Multi-Agent RL, different axes to consider:
+		\begin{itemize}
+			\item Training strategy: centralised or decentralised
+			\item Policy constraints: homogeneous or heterogeneous
+			\item Agent population: few or many
+			\item \dots
+		\end{itemize}
+		\item Several techniques have been proposed to handle the complexity of the problem
+		\begin{itemize}
+			\item MAPPO, Mean-Field RL, COMA, \dots
+		\end{itemize}
+		\item No one size fits all solution 
+		\begin{itemize}
+			\item Some handle only cooperative problems
+			\item Other works only with a few agents
+			\item \dots
+		\end{itemize}
+		\item My hope: a general framework for MARL (like the one for RL)
 	\end{itemize}
-	\item Ongoing work (they can be part of your thesis/project!)
-	\begin{itemize}
-		\item Spatio-temporal phenomena combined Graph Neural Network with Aggregate Computing
-		\item Deep Reinforcement Learning for collectively distributed schedulers
-		\item Learn to restructure, how to move (edge? Cloud?) computation to improve performance
-		\item Collective program sketching for general aggregate computing program.
-	\end{itemize}
-\end{itemize}
 \end{frame}
 %===============================================================================
 \section*{}
