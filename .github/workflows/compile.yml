@@ -5,7 +5,7 @@ on:
       - main
       - master
 env:
-  LATEX_ROOT: collective-learning
+  LATEX_ROOT: intro-marl
 jobs:
   compile:
     runs-on: ubuntu-latest
